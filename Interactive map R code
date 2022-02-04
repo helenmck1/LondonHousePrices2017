@@ -1,0 +1,106 @@
+#Load packages
+library(leaflet)
+library(rgdal)
+library(colorbrewer)
+
+#Import geojsons
+LSOA <- readOGR("C:/Yourfilelocation/LSOA_MeanHousePrices2017.geojson")
+stations <- readOGR("C:/Yourfilelocation//Stations.geojson")
+plot(LSOA) #create a simple plot of LSOA data
+
+#Extract no data values
+NoData <-subset(LSOA, LSOA$MeanHousePrices_Mean_2017== -9999)
+LSOA <-subset(LSOA, LSOA$MeanHousePrices_Mean_2017> -9999)
+
+#Inspect the data
+names(LSOA)
+names(stations)
+summary(LSOA$MeanHousePrices_Mean_2017)
+
+#Set colour ramps and bins
+LSOABins <- c(0, 400000,600000,800000,1000000,2000000,5000000,10000000)
+LSOAPal <- colorBin("YlGnBu", domain = LSOA$MeanHousePrices_Mean_2017, bins = LSOABins)
+
+#Set pop-up content
+LSOA$popup <- paste("<strong>",LSOA$lsoa01nm,"</strong>", "</br>", 
+                    LSOA$lsoa01cd, "</br>",
+                      "Mean house price (2017): £", prettyNum(LSOA$MeanHousePrices_Mean_2017, big.mark = ","))
+
+NoData$popup <- paste("<strong>",NoData$lsoa01nm,"</strong>", "</br>", 
+                      NoData$lsoa01cd, ": No Data")
+
+stations$popup <-paste(stations$Name)
+
+#Map code block
+m <-leaflet() %>%
+  #Import base maps
+  addProviderTiles(providers$Esri.WorldImagery, group = "Basemap - aerial") %>%
+  addProviderTiles(providers$CartoDB.Positron, group = "Basemap - greyscale") %>%
+  addProviderTiles(providers$CartoDB.DarkMatter, group = "Basemap - dark") %>%
+  #Add LSOA layer
+  addPolygons(data = LSOA,
+              stroke = TRUE, 
+              weight = 0.2,
+              color = "#ABABAB",
+              smoothFactor = 0.3, #add a smoothing factor
+              opacity =0.9,
+              fillColor = ~LSOAPal(MeanHousePrices_Mean_2017), #apply the colour scheme
+              fillOpacity = 0.65,
+              popup = ~popup, #add a popup
+              highlightOptions = highlightOptions(color = "#E2068A", weight = 1.5, 
+                                                  fillOpacity = 0.5), #add hover effect
+              group = "Average House Price")%>% #add groups
+  #Add station layer
+  addCircleMarkers(data = stations, ~x,~y,
+                   radius = 2,
+                   stroke = TRUE,
+                   color = "#424242",
+                   weight = 1,
+                   fillOpacity = 1,
+                   fillColor ="#FDFDFD",
+                   popup = ~popup,
+                   group = "Stations")%>% 
+  #Add no data layer
+  addPolygons(data = NoData,
+              stroke = TRUE, 
+              weight = 0.2,
+              color = "#ABABAB",
+              smoothFactor = 0.3, #add a smoothing factor
+              opacity =0.8,
+              fillColor = "#ABABAB",
+              fillOpacity = 0.45,
+              popup = ~popup, 
+              group = "No Data")%>% 
+#Create legends
+  addLegend("bottomright",opacity = 1,
+          colors =c("#ffffcc","#c7e9b4","#7fcdbb","#41b6c4","#1d91c0","#225ea8","#0c2c84"),
+          title = "Average House Price</br>2017, all house sales",
+          labels= c("<£400,000","£400,000 - £599,999","£600,000 - £799,999",
+                    "£800,000 - £999,999","£1 - 2 million", "£2 - 5 million", "£5 - 9 million"),
+          group = "Average House Price"
+          )%>%
+  addLegend("bottomright",opacity = 1,
+            colors =c("#ABABAB"),
+            title = "",
+            labels= c("No Data"),
+            group = "No Data"
+  )%>%
+  #Set layer visibility control
+  addLayersControl(
+    overlayGroups = c("Average House Price", "Stations", "No Data"),
+    baseGroups = c("Basemap - dark","Basemap - greyscale","Basemap - aerial"),
+    options = layersControlOptions(collapsed = TRUE))%>% 
+  #Set which layers should initially not be visible
+  hideGroup("Stations") %>% 
+  hideGroup("No Data")%>%
+  #Add buttons to zoom to location/world
+  addEasyButton(easyButton(
+    icon="fa-globe", title="Zoom to Level 1",
+    onClick=JS("function(btn, map){ map.setZoom(1); }"))) %>%
+  addEasyButton(easyButton(
+    icon="fa-crosshairs", title="Locate Me",
+    onClick=JS("function(btn, map){ map.locate({setView: true}); }")))
+  
+
+#Load the map
+m
